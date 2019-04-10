@@ -24,8 +24,8 @@ import tensorflow as tf
 import numpy as np
 from pdb import set_trace as bb
 import atari_zoo.config
-from atari_zoo.config import datadir_local_dict,datadir_remote_dict,url_formatter_dict 
-from atari_zoo import game_action_counts 
+from atari_zoo.config import datadir_local_dict,datadir_remote_dict,url_formatter_dict
+from atari_zoo import game_action_counts
 from atari_zoo.utils import *
 import atari_zoo.log
 
@@ -63,11 +63,11 @@ class RL_model(Model):
 
     image_shape = [84, 84, 4]
     input_scale = 1.0
-    image_value_range = (0, 1) 
+    image_value_range = (0, 1)
     input_name = 'X_t'
     ph_type = 'float32'
 
-    """ 
+    """
     overwrite input creating function to handle different
     datatypes; Dopamine models want uint8 placeholders
     """
@@ -123,15 +123,15 @@ class RL_model(Model):
     #what processing must be done to extract the
     #right distribution of actions from the output
     #of the network
-    def get_action(self,model):
+    def get_action(self, model, randomness=False):
         raise NotImplementedError
 
     #transform weight tensor to be of canonical style
     def preprocess_weight(self,x):
         #default is identity
         return x
-   
-    #grab weights from model given current session 
+
+    #grab weights from model given current session
     def get_weights(self,session,layer_no):
         weights_name = self.weights[layer_no]['name']
         weights = session.graph.get_tensor_by_name("import/%s:0" % weights_name)
@@ -152,7 +152,7 @@ class RL_model(Model):
             return act
         else:
             return np.transpose(act,axes=[0,3,1,2])
-  
+
 #OpenAI's evolution strategy algorithm
 class RL_ES(RL_model):
   weights = [
@@ -172,8 +172,8 @@ class RL_ES(RL_model):
   def preprocess_weight(self,x):
       return x[0]
 
-  def get_action(self,model):
-        policy = model(self.layers[-1]['name']) 
+  def get_action(self, model, randomness=False):
+        policy = model(self.layers[-1]['name'])
         action_sample = tf.argmax(policy, axis=-1)
         return action_sample
 
@@ -193,7 +193,7 @@ class RL_GA(RL_model):
       {'name':'ga/conv3/w'},
   ]
 
-  def get_action(self,model):
+  def get_action(self, model, randomness=False):
         policy = model(self.layers[-1]['name'])
         action_sample = tf.argmax(policy, axis=-1)
         return action_sample
@@ -219,8 +219,8 @@ class RL_Apex(RL_model):
       {'name':'deepq/q_func/convnet/Conv_1/weights'},
       {'name':'deepq/q_func/convnet/Conv_2/weights'}
   ]
- 
-  def get_action(self,model):
+
+  def get_action(self, model, randomness=False):
         policy = model(self.layers[-1]['name']) #"a2c/policy/BiasAdd")
         action_sample = tf.argmax(policy, axis=-1)
         return action_sample
@@ -230,7 +230,7 @@ class RL_DQN_dopamine(RL_model):
   #ph_type = 'uint8'
   input_scale = 255.0
   preprocess_style = 'dopamine'
-  image_value_range = (0, 255) 
+  image_value_range = (0, 255)
   input_name = 'Online/Cast'
   valid_run_range = (1,3)
 
@@ -247,9 +247,9 @@ class RL_DQN_dopamine(RL_model):
      {'type': 'dense', 'name': 'Online/fully_connected/Relu', 'size': 512},
      {'type': 'dense', 'name': 'Online/fully_connected_1/BiasAdd', 'size':18}
    ]
- 
-  def get_action(self,model):
-        policy = model(self.layers[-1]['name']) 
+
+  def get_action(self, model, randomness=False):
+        policy = model(self.layers[-1]['name'])
         action_sample = tf.argmax(policy, axis=1)
         return action_sample
 
@@ -267,7 +267,7 @@ class RL_Rainbow_dopamine(RL_model):
   valid_run_range = (1,5)
   preprocess_style = 'dopamine'
   input_scale = 255.0
-  image_value_range = (0, 255) 
+  image_value_range = (0, 255)
   #input_name = 'state_ph'
   input_name = 'Online/Cast'
 
@@ -288,8 +288,8 @@ class RL_Rainbow_dopamine(RL_model):
 
   additional_layers={'c51':{'type':'dense','name': 'Online/fully_connected_1/BiasAdd', 'size':18*51}}
 
- 
-  def get_action(self,model):
+
+  def get_action(self, model, randomness=False):
         policy = model(self.layers[-1]['name'])
         action_sample = tf.argmax(policy, axis=1)
         return action_sample
@@ -302,29 +302,36 @@ class RL_Rainbow_dopamine(RL_model):
     raise NotImplementedError
     #"Dopamine models include only the final checkpoint."
 
-#A2C -- policy gradient algorithm
-class RL_A2C(RL_model):
-  weights = [
-      {'name':'a2c/conv1/weights'},
-      {'name':'a2c/conv2/weights'},
-      {'name':'a2c/conv3/weights'}
-  ]
 
-  layers = [
-     {'type': 'conv', 'name': 'a2c/conv1/Relu', 'size': 32},
-     {'type': 'conv', 'name': 'a2c/conv2/Relu', 'size': 64},
-     {'type': 'conv', 'name': 'a2c/conv3/Relu', 'size': 64},
-     {'type': 'dense', 'name': 'a2c/fc/Relu', 'size': 512},
-     #TODO: enable accesing a2c's value head as well! 
-     #{'type': 'dense', 'name': 'a2c/value/BiasAdd', 'size':18},
-     {'type': 'dense', 'name': 'a2c/policy/BiasAdd', 'size':18}
-   ]
-  
-  def get_action(self,model):
-        policy = model(self.layers[-1]['name']) 
-        rand_u = tf.random_uniform(tf.shape(policy))
-        action_sample = tf.argmax(policy - tf.log(-tf.log(rand_u)), axis=-1)
+# A2C -- policy gradient algorithm
+class RL_A2C(RL_model):
+    weights = [
+        {'name': 'a2c/conv1/weights'},
+        {'name': 'a2c/conv2/weights'},
+        {'name': 'a2c/conv3/weights'}
+    ]
+
+    layers = [
+        {'type': 'conv', 'name': 'a2c/conv1/Relu', 'size': 32},
+        {'type': 'conv', 'name': 'a2c/conv2/Relu', 'size': 64},
+        {'type': 'conv', 'name': 'a2c/conv3/Relu', 'size': 64},
+        {'type': 'dense', 'name': 'a2c/fc/Relu', 'size': 512},
+        # TODO: enable accesing a2c's value head as well!
+        # {'type': 'dense', 'name': 'a2c/value/BiasAdd', 'size':18},
+        {'type': 'dense', 'name': 'a2c/policy/BiasAdd', 'size': 18}
+    ]
+
+    def get_action(self, model, randomness=False):
+        policy = model(self.layers[-1]['name'])
+
+        if randomness:
+            rand_u = tf.random_uniform(tf.shape(policy))
+            action_sample = tf.argmax(policy - tf.log(-tf.log(rand_u)), axis=-1)
+        else:
+            action_sample = tf.argmax(policy, axis=-1)
+
         return action_sample
+
 
 class RL_IMPALA(RL_model):
   input_name = 'agent_1/agent/unroll/batch_apply/truediv'
@@ -344,7 +351,7 @@ class RL_IMPALA(RL_model):
      {'type': 'dense', 'name': 'agent_1/agent/unroll/batch_apply_1/policy_logits/add', 'size': 18},
    ]
 
-  def get_action(self,model):
+  def get_action(self, model, randomness=False):
         policy_logits = model(self.layers[-1]['name'])
         new_action = tf.multinomial(policy_logits, num_samples=1,
                 output_dtype=tf.int32)
@@ -397,7 +404,7 @@ def GetFilePathsForModel(algo,environment,run_no,tag='final',local=False):
 
         if (algo,'remote') in url_formatter_dict:
             model_path = url_formatter_dict[(algo,'remote')](data_root,algo,environment,run_no)
-   
+
         log_path = "%s/checkpoints/%s_%d" % (data_root,environment,run_no)
 
     return model_path,data_path,log_path
@@ -407,7 +414,7 @@ Function to query for available checkpoints for a model
 """
 def GetAvailableTaggedCheckpoints(algo,environment,run_no,local=False):
     _,_,log_path = GetFilePathsForModel(algo,environment,run_no,local=local)
-    json_data = atari_zoo.log.load_checkpoint_info(log_path) 
+    json_data = atari_zoo.log.load_checkpoint_info(log_path)
     chkpoint_info = atari_zoo.log.parse_checkpoint_info(json_data)
     return chkpoint_info
 
@@ -434,12 +441,13 @@ def MakeAtariModel(algo,environment,run_no,tag='final',local=False):
     name = "%s_%s_%d_%s" % (algo,environment,run_no,tag)
 
     model_class = class_map[algo]
-   
+
     valid_run_range = model_class.valid_run_range
     if run_no < valid_run_range[0] or run_no > valid_run_range[1]:
         raise ValueError("Requested run %d out of range (%d,%d)"%(run_no,valid_run_range[0],valid_run_range[1]))
 
     return _MakeAtariModel(class_map[algo],name,environment,model_path,run_no,algo,log_path,data_path)
+
 
 if __name__=='__main__':
     #easy!
